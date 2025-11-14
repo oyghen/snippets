@@ -10,13 +10,13 @@ def profile(df: PandasDF, /, *, q: list[int] | None = None) -> PandasDF:
     Examples
     --------
     >>> import pandas as pd
-    >>> import pandaslib as pdl
+    >>> from pandasyak import core
     >>> data = {
     ...     "a": [True, None, False, False, True, False],
     ...     "b": [1] * 6,
     ...     "c": [None] * 6,
     ... }
-    >>> pdl.profile(pd.DataFrame(data)).T
+    >>> core.profile(pd.DataFrame(data)).T
                         a          b       c
     type           object      int64  object
     count               5          6       0
