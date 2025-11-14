@@ -1,0 +1,21 @@
+[project]
+name = "snippets"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas[compression,computation,excel,output-formatting,parquet,performance,plot]>=2.3.3",
+    "pandasyak",
+]
+
+[tool.uv.sources]
+pandasyak = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
+    "pytest>=8.4.2",
+    "ruff>=0.14.3",
+]
