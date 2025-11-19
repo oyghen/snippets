@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "snippandas",
     "snippets",
+    "snippy",
 ]
 
 [[package]]
@@ -1338,6 +1339,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "pandas", extra = ["compression", "computation", "excel", "output-formatting", "parquet", "performance", "plot"] },
     { name = "snippandas" },
+    { name = "snippy" },
 ]
 
 [package.dev-dependencies]
@@ -1351,6 +1353,7 @@ dev = [
 requires-dist = [
     { name = "pandas", extras = ["compression", "computation", "excel", "output-formatting", "parquet", "performance", "plot"], specifier = ">=2.3.3" },
     { name = "snippandas", editable = "packages/snippandas" },
+    { name = "snippy", editable = "packages/snippy" },
 ]
 
 [package.metadata.requires-dev]
@@ -1359,6 +1362,11 @@ dev = [
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "ruff", specifier = ">=0.14.3" },
 ]
+
+[[package]]
+name = "snippy"
+version = "0.0.0"
+source = { editable = "packages/snippy" }
 
 [[package]]
 name = "tabulate"

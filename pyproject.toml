@@ -5,10 +5,12 @@ requires-python = ">=3.11"
 dependencies = [
     "pandas[compression,computation,excel,output-formatting,parquet,performance,plot]>=2.3.3",
     "snippandas",
+    "snippy",
 ]
 
 [tool.uv.sources]
 snippandas = { workspace = true }
+snippy = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]

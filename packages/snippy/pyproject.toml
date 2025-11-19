@@ -1,0 +1,4 @@
+[project]
+name = "snippy"
+version = "0.0.0"
+dependencies = []
