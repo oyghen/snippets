@@ -9,10 +9,3 @@ select = [
     "I",  # isort
     "D202",  # pydocstyle - no blank lines after function docstring
 ]
-
-[lint.per-file-ignores]
-"src/*/__init__.py" = [
-    "F403",
-    "F405",
-    "F821",
-]
