@@ -4,11 +4,11 @@ version = "0.0.0"
 requires-python = ">=3.11"
 dependencies = [
     "pandas[compression,computation,excel,output-formatting,parquet,performance,plot]>=2.3.3",
-    "pandasyak",
+    "snippandas",
 ]
 
 [tool.uv.sources]
-pandasyak = { workspace = true }
+snippandas = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]

@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 from pandas import DataFrame as PandasDF
-from pandasyak import core
+from snippandas import core
 
 
 class TestProfile:

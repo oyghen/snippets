@@ -10,7 +10,7 @@ def profile(df: PandasDF, /, *, q: list[int] | None = None) -> PandasDF:
     Examples
     --------
     >>> import pandas as pd
-    >>> from pandasyak import core
+    >>> from snippandas import core
     >>> data = {
     ...     "a": [True, None, False, False, True, False],
     ...     "b": [1] * 6,
