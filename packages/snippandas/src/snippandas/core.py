@@ -1,5 +1,6 @@
 __all__ = ("display", "profile")
 
+import functools
 
 import numpy as np
 import pandas as pd
@@ -91,6 +92,32 @@ def display(
 
     except (ModuleNotFoundError, ImportError):
         print_tabulated_df()
+
+
+def join(
+    dataframes: list[PandasDF],
+    on: str | list[str],
+    how: str = "inner",
+) -> PandasDF:
+    """Join iterable of Pandas dataframes with index reset.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from snippandas import core
+    >>> df1 = pd.DataFrame([dict(a=1, b=3), dict(a=2, b=4)])
+    >>> df2 = pd.DataFrame([dict(a=1, c=5), dict(a=2, c=6)])
+    >>> df3 = pd.DataFrame([dict(a=1, d=7)])
+    >>> core.join([df1, df2, df3], on="a", how="left")
+       a  b  c    d
+    0  1  3  5  7.0
+    1  2  4  6  NaN
+    """
+    # re-indexing by default
+    return functools.reduce(
+        functools.partial(pd.merge, on=on, how=how, suffixes=(False, False), copy=True),
+        map(pd.DataFrame, dataframes),
+    )
 
 
 def profile(df: PandasDF, /, *, q: list[int] | None = None) -> PandasDF:

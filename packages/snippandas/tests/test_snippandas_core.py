@@ -6,24 +6,24 @@ from snippandas import core
 
 class TestProfile:
     def test_default_call(self, df: PandasDF, expected_default: PandasDF):
-        actual = core.profile(df)
-        assert isinstance(actual, PandasDF)
+        result = core.profile(df)
+        assert isinstance(result, PandasDF)
 
-        pd.testing.assert_frame_equal(actual, expected_default)
+        pd.testing.assert_frame_equal(result, expected_default)
         pd.testing.assert_frame_equal(
-            actual.query("mean.notnull()"),
+            result.query("mean.notnull()"),
             expected_default.loc[["b", "d"], :],
         )
         pd.testing.assert_frame_equal(
-            actual.query("mean.isnull()"),
+            result.query("mean.isnull()"),
             expected_default.loc[["a", "c"], :],
         )
 
     def test_quantiles(self, df: PandasDF, expected_quantiles: PandasDF):
-        actual = core.profile(df, q=[1, 30, 70, 99])
-        assert isinstance(actual, PandasDF)
+        result = core.profile(df, q=[1, 30, 70, 99])
+        assert isinstance(result, PandasDF)
 
-        pd.testing.assert_frame_equal(actual, expected_quantiles)
+        pd.testing.assert_frame_equal(result, expected_quantiles)
 
     @pytest.fixture(scope="class")
     def df(self) -> PandasDF:
@@ -84,3 +84,21 @@ class TestProfile:
                 "max": {"a": float("nan"), "b": 1.0, "c": float("nan"), "d": 5.0},
             }
         )
+
+
+def test_join():
+    idx = (0, 1)
+
+    cols1 = ("a", "b")
+    row11, row12 = (1, 3), (2, 4)
+    df1 = pd.DataFrame([row11, row12], idx, cols1)
+
+    cols2 = ("a", "c")
+    row21, row22 = (1, 5), (2, 6)
+    df2 = pd.DataFrame([row21, row22], idx, cols2)
+
+    result = core.join([df1, df2], on="a")
+    assert isinstance(result, pd.DataFrame)
+
+    expected = pd.merge(df1, df2, on="a")
+    pd.testing.assert_frame_equal(result, expected)
