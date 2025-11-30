@@ -1,7 +1,96 @@
-__all__ = ["profile"]
+__all__ = ("display", "profile")
 
+
+import numpy as np
 import pandas as pd
 from pandas import DataFrame as PandasDF
+from tabulate import tabulate
+
+
+def display(
+    df: PandasDF,
+    label: str | None = None,
+    na_rep: str | None = "NULL",
+    drop_original_index: bool = True,
+    with_row_numbers: bool = True,
+) -> None:  # pragma: no cover
+    """Returns a stylized representation of the Pandas dataframe.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from snippandas import core
+    >>> df = pd.DataFrame([dict(x=1, y=2), dict(x=3, y=4), dict(x=None, y=6)])
+    >>> core.display(df)
+    +----+------+-----+
+    |    |    x |   y |
+    +====+======+=====+
+    |  1 |    1 |   2 |
+    +----+------+-----+
+    |  2 |    3 |   4 |
+    +----+------+-----+
+    |  3 | NULL |   6 |
+    +----+------+-----+
+    """
+    with_label = label is not None
+
+    def print_tabulated_df() -> None:
+        tabulated_df = tabulate(
+            df.replace(np.nan, None),
+            headers="keys",
+            tablefmt="grid",
+            floatfmt="_g",
+            intfmt="_g",
+            missingval=na_rep,
+        )
+        if with_label:
+            n = max(map(len, tabulated_df.splitlines()))
+            print(f" {label} ".center(n, fillchar="="))
+        print(tabulated_df)
+
+    if with_row_numbers:
+        df = df.copy().reset_index(drop=drop_original_index)
+        df.index += 1
+
+    if get_shell_type() != "notebook":
+        print_tabulated_df()
+        return
+
+    try:
+        from IPython.display import display as notebook_display
+
+        df_style = df.style.set_caption(label) if with_label else df.style
+        table_styles = []
+        if with_label:
+            table_styles.append(
+                dict(
+                    selector="caption",
+                    props=[("font-size", "120%"), ("font-weight", "bold")],
+                )
+            )
+
+        # Function to apply 'g' formatting
+        def general_format(x) -> str:
+            if pd.isnull(x):
+                return na_rep
+            return f"{x:_g}"
+
+        df_style = (
+            df_style.format(
+                na_rep=na_rep,
+                formatter={
+                    col: general_format
+                    for col in df.select_dtypes(include=[np.number]).columns
+                },
+            )
+            .highlight_null(props="color: lightgray; background-color: transparent")
+            .set_table_styles(table_styles)
+        )
+
+        notebook_display(df_style)
+
+    except (ModuleNotFoundError, ImportError):
+        print_tabulated_df()
 
 
 def profile(df: PandasDF, /, *, q: list[int] | None = None) -> PandasDF:
@@ -76,3 +165,30 @@ def profile(df: PandasDF, /, *, q: list[int] | None = None) -> PandasDF:
         ],
         axis=1,
     )
+
+
+def get_shell_type() -> str:
+    """Returns the type of the current shell session.
+
+    The function identifies whether code is executed from within
+    a 'python', 'ipython', or 'notebook' session.
+    """
+    try:
+        from IPython import get_ipython
+
+        if get_ipython() is None:
+            return "python"
+
+        shell = get_ipython().__class__.__name__
+
+        if shell == "TerminalInteractiveShell":
+            return "ipython"
+
+        elif shell == "ZMQInteractiveShell":
+            return "notebook"
+
+        else:
+            return "python"
+
+    except (ModuleNotFoundError, ImportError, NameError):
+        return "python"
