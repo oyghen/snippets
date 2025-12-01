@@ -1,0 +1,4 @@
+[project]
+name = "snipnumpy"
+version = "0.0.0"
+dependencies = []

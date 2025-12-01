@@ -5,12 +5,14 @@ requires-python = ">=3.11"
 dependencies = [
     "jupyterlab>=4.5.0",
     "pandas[compression,computation,excel,output-formatting,parquet,performance,plot]>=2.3.3",
+    "snipnumpy",
     "snippandas",
     "snippy",
     "toolz>=1.1.0",
 ]
 
 [tool.uv.sources]
+snipnumpy = { workspace = true }
 snippandas = { workspace = true }
 snippy = { workspace = true }
 
