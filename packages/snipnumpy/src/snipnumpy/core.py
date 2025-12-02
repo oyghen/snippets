@@ -10,7 +10,6 @@ import random
 import numpy as np
 import numpy.typing as npt
 
-
 ArrayLike = npt.ArrayLike
 Seed = int | float | random.Random | np.random.RandomState | np.random.Generator | None
 Vector = npt.NDArray[np.float64]
