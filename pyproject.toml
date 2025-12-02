@@ -9,6 +9,7 @@ dependencies = [
     "snippandas",
     "snippy",
     "snipsklearn",
+    "snipspark",
     "toolz>=1.1.0",
 ]
 
@@ -17,6 +18,7 @@ snipnumpy = { workspace = true }
 snippandas = { workspace = true }
 snippy = { workspace = true }
 snipsklearn = { workspace = true }
+snipspark = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]

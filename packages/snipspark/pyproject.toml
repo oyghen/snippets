@@ -1,0 +1,6 @@
+[project]
+name = "snipspark"
+version = "0.0.0"
+dependencies = [
+    "pyspark<4.0.0",
+]

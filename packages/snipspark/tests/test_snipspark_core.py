@@ -1,0 +1,647 @@
+import datetime as dt
+import math
+from collections.abc import Callable
+
+import pytest
+import toolz
+from pyspark.sql import Column as SparkCol
+from pyspark.sql import DataFrame as SparkDF
+from pyspark.sql import Row, SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+from snipspark import core
+
+
+@pytest.mark.slow
+class TestSparkKit:
+    def test_add_prefix(self, spark: SparkSession):
+        df = spark.createDataFrame([Row(a=1, b=2)])
+
+        # all columns
+        actual = core.add_prefix(df, "pfx_")
+        expected = spark.createDataFrame([Row(pfx_a=1, pfx_b=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+        # with column selection
+        actual = core.add_prefix(df, "pfx_", subset=["a"])
+        expected = spark.createDataFrame([Row(pfx_a=1, b=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+        # used as transformation function
+        actual = df.transform(lambda df: core.add_prefix(df, "pfx_"))
+        expected = spark.createDataFrame([Row(pfx_a=1, pfx_b=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+        # used as transformation function with column selection
+        actual = df.transform(lambda df: core.add_prefix(df, "pfx_", subset=["b"]))
+        expected = spark.createDataFrame([Row(a=1, pfx_b=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_add_suffix(self, spark: SparkSession):
+        df = spark.createDataFrame([Row(a=1, b=2)])
+
+        # all columns
+        actual = core.add_suffix(df, "_sfx")
+        expected = spark.createDataFrame([Row(a_sfx=1, b_sfx=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+        # with column selection
+        actual = core.add_suffix(df, "_sfx", subset=["a"])
+        expected = spark.createDataFrame([Row(a_sfx=1, b=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+        # used as transformation function
+        actual = df.transform(lambda df: core.add_suffix(df, "_sfx"))
+        expected = spark.createDataFrame([Row(a_sfx=1, b_sfx=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+        # used as transformation function with column selection
+        actual = df.transform(lambda df: core.add_suffix(df, "_sfx", subset=["b"]))
+        expected = spark.createDataFrame([Row(a=1, b_sfx=2)])
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_all_col(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(i=1, a=False, b=False, expect=False),
+                Row(i=2, a=False, b=True, expect=False),
+                Row(i=3, a=True, b=False, expect=False),
+                Row(i=4, a=True, b=True, expect=True),
+                Row(i=5, a=False, b=None, expect=False),
+                Row(i=6, a=True, b=None, expect=False),
+                Row(i=7, a=None, b=False, expect=False),
+                Row(i=8, a=None, b=True, expect=False),
+                Row(i=9, a=None, b=None, expect=False),
+            ]
+        )
+        actual = df.withColumn("fx", core.all_col("a", "b")).select("i", "fx")
+        expected = df.select("i", F.col("expect").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_any_col(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(i=1, a=False, b=False, expect=False),
+                Row(i=2, a=False, b=True, expect=True),
+                Row(i=3, a=True, b=False, expect=True),
+                Row(i=4, a=True, b=True, expect=True),
+                Row(i=5, a=False, b=None, expect=False),
+                Row(i=6, a=True, b=None, expect=True),
+                Row(i=7, a=None, b=False, expect=False),
+                Row(i=8, a=None, b=True, expect=True),
+                Row(i=9, a=None, b=None, expect=False),
+            ]
+        )
+        actual = df.withColumn("fx", core.any_col("a", "b")).select("i", "fx")
+        expected = df.select("i", F.col("expect").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_assert_dataframe_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+        rgt_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        assert core.assert_dataframe_equal(lft_df, rgt_df) is None
+
+    def test_assert_row_count_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        rgt_df__equal = spark.createDataFrame([Row(x=1), Row(x=3)])
+        rgt_df__different = spark.createDataFrame([Row(x=1)])
+
+        assert core.assert_row_count_equal(lft_df, rgt_df__equal) is None
+
+        with pytest.raises(ValueError):
+            core.assert_row_count_equal(lft_df, rgt_df__different)
+
+    def test_assert_row_value_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        rgt_df__equal = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+        rgt_df__different = spark.createDataFrame([Row(x=1, y=7), Row(x=3, y=9)])
+
+        assert core.assert_row_value_equal(lft_df, rgt_df__equal) is None
+
+        with pytest.raises(ValueError):
+            core.assert_row_value_equal(lft_df, rgt_df__different)
+
+    def test_assert_schema_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        rgt_df__equal = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+        rgt_df__different_type = spark.createDataFrame(
+            [Row(x=1, y="2"), Row(x=3, y="4")]
+        )
+        rgt_df__different_size = spark.createDataFrame([Row(x=1), Row(x=3)])
+
+        assert core.assert_schema_equal(lft_df, rgt_df__equal) is None
+
+        with pytest.raises(ValueError):
+            core.assert_schema_equal(lft_df, rgt_df__different_type)
+
+        with pytest.raises(ValueError):
+            core.assert_schema_equal(lft_df, rgt_df__different_size)
+
+    @pytest.mark.skip
+    def test_bool_to_int(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(i=1, x=True, expect=1),
+                Row(i=2, x=False, expect=0),
+            ],
+            schema=T.StructType(
+                [
+                    T.StructField("i", T.IntegerType(), True),
+                    T.StructField("x", T.BooleanType(), True),
+                    T.StructField("expect", T.IntegerType(), True),
+                ]
+            ),
+        )
+
+        actual = core.bool_to_int(df).select("i", F.col("x").alias("fx"))
+        expected = df.select("i", F.col("expect").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.skip
+    def test_bool_to_str(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(i=1, x=True, expect="true"),
+                Row(i=2, x=False, expect="false"),
+            ],
+            schema=T.StructType(
+                [
+                    T.StructField("i", T.IntegerType(), True),
+                    T.StructField("x", T.BooleanType(), True),
+                    T.StructField("expect", T.StringType(), True),
+                ]
+            ),
+        )
+
+        actual = core.bool_to_str(df).select("i", F.col("x").alias("fx"))
+        expected = df.select("i", F.col("expect").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_check_column_present(self, spark: SparkSession):
+        df = spark.createDataFrame([Row(x=1, y=2)])
+        actual = core.check_column_present(df, "x")
+        assert actual is df
+
+        actual = core.check_column_present(df, "x", "y")
+        assert actual is df
+
+        with pytest.raises(ValueError):
+            core.check_column_present(df, "z")
+
+        with pytest.raises(ValueError):
+            core.check_column_present(df, "x", "y", "z")
+
+    def test_count_nulls(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(x=1, y=2, z=None),
+                Row(x=4, y=None, z=6),
+                Row(x=7, y=8, z=None),
+                Row(x=10, y=None, z=None),
+            ]
+        )
+
+        actual = core.count_nulls(df)
+        expected = spark.createDataFrame([Row(x=0, y=2, z=3)])
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = df.transform(core.count_nulls)
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.count_nulls(df, subset=["x", "z"])
+        expected = spark.createDataFrame([Row(x=0, z=3)])
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.count_nulls(df, subset=["x", "z"])
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_cvf(self, spark: SparkSession):
+        # single column
+        counts = {"a": 3, "b": 1, "c": 1, "g": 2, "h": 1}
+        df = spark.createDataFrame(
+            [Row(x=v) for v, c in counts.items() for _ in range(c)]
+        )
+
+        expected_rows = [
+            Row(x="a", count=3, percent=37.5, cumul_count=3, cumul_percent=37.5),
+            Row(x="g", count=2, percent=25.0, cumul_count=5, cumul_percent=62.5),
+            Row(x="b", count=1, percent=12.5, cumul_count=6, cumul_percent=75.0),
+            Row(x="c", count=1, percent=12.5, cumul_count=7, cumul_percent=87.5),
+            Row(x="h", count=1, percent=12.5, cumul_count=8, cumul_percent=100.0),
+        ]
+        expected = spark.createDataFrame(expected_rows)
+
+        for cols in ["x", ["x"], F.col("x")]:
+            actual = core.cvf(df, cols)
+            self.assert_dataframe_equal(actual, expected)
+
+        # multiple columns
+        df = spark.createDataFrame(
+            [
+                Row(x="a", y=1),
+                Row(x="c", y=1),
+                Row(x="b", y=1),
+                Row(x="g", y=2),
+                Row(x="h", y=1),
+                Row(x="a", y=1),
+                Row(x="g", y=2),
+                Row(x="a", y=2),
+            ]
+        )
+        actual = core.cvf(df, "x")  # check single column check first
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.cvf(df, "x", "y")
+
+        expected_rows = [
+            Row(x="a", y=1, count=2, percent=25.0, cumul_count=2, cumul_percent=25.0),
+            Row(x="g", y=2, count=2, percent=25.0, cumul_count=4, cumul_percent=50.0),
+            Row(x="a", y=2, count=1, percent=12.5, cumul_count=5, cumul_percent=62.5),
+            Row(x="b", y=1, count=1, percent=12.5, cumul_count=6, cumul_percent=75.0),
+            Row(x="c", y=1, count=1, percent=12.5, cumul_count=7, cumul_percent=87.5),
+            Row(x="h", y=1, count=1, percent=12.5, cumul_count=8, cumul_percent=100.0),
+        ]
+        expected = spark.createDataFrame(expected_rows)
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.cvf(df, ["x", "y"])
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.cvf(df, "x", F.col("y"))
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.cvf(df, F.col("x"), F.col("y"))
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.cvf(df, [F.col("x"), F.col("y")])
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_date_range(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [Row(id=1), Row(id=3), Row(id=2), Row(id=2), Row(id=3)]
+        )
+        expected = spark.createDataFrame(
+            [Row(id=i, d=dt.date(2023, 5, d)) for i in [1, 2, 3] for d in range(1, 8)]
+        )
+
+        actual = core.date_range(df, "2023-05-01", "2023-05-07", "id", "d")
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.date_range(
+            df, dt.date(2023, 5, 1), dt.date(2023, 5, 7), "id", "d"
+        )
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.parametrize("func", [toolz.identity])
+    def test_filter_date(self, spark: SparkSession, func: Callable):
+        ref_date = func("2024-01-01")
+        df = spark.createDataFrame(
+            [
+                Row(d=func("2023-11-30"), n1=False, n2=False, n30=False, n_inf=True),
+                Row(d=func("2023-12-02"), n1=False, n2=False, n30=False, n_inf=True),
+                Row(d=func("2023-12-03"), n1=False, n2=False, n30=True, n_inf=True),
+                Row(d=func("2023-12-15"), n1=False, n2=False, n30=True, n_inf=True),
+                Row(d=func("2023-12-20"), n1=False, n2=False, n30=True, n_inf=True),
+                Row(d=func("2023-12-29"), n1=False, n2=False, n30=True, n_inf=True),
+                Row(d=func("2023-12-30"), n1=False, n2=False, n30=True, n_inf=True),
+                Row(d=func("2023-12-31"), n1=False, n2=True, n30=True, n_inf=True),
+                Row(d=ref_date, n1=True, n2=True, n30=True, n_inf=True),
+                Row(d=func("2024-01-02"), n1=False, n2=False, n30=False, n_inf=False),
+                Row(d=func("2024-01-08"), n1=False, n2=False, n30=False, n_inf=False),
+                Row(d=func("2024-01-10"), n1=False, n2=False, n30=False, n_inf=False),
+            ],
+        )
+
+        for n, col in [
+            (1, "n1"),
+            (2, "n2"),
+            (30, "n30"),
+            (float("inf"), "n_inf"),
+            (math.inf, "n_inf"),
+        ]:
+            actual = core.filter_date(df, "d", ref_date=ref_date, num_days=n).select(
+                "d"
+            )
+            expected = df.where(col).select("d")
+            self.assert_dataframe_equal(actual, expected)
+
+        for n in [None, "0", "a_string"]:
+            with pytest.raises(TypeError):
+                # noinspection PyTypeChecker
+                core.filter_date(df, "d", ref_date=ref_date, num_days=n)
+
+        for n in [0, -1, 1.0, 1.5]:
+            with pytest.raises(ValueError):
+                core.filter_date(df, "d", ref_date=ref_date, num_days=n)
+
+    def test_has_column(self, spark: SparkSession):
+        df = spark.createDataFrame([Row(x=1, y=2)])
+        assert core.has_column(df, ["x"])
+        assert core.has_column(df, ["x", "y"])
+        assert not core.has_column(df, ["x", "y", "z"])
+        assert not core.has_column(df, "z")
+        assert not core.has_column(df, "x", "z")
+
+    def test_is_dataframe_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        rgt_df__equal = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+        rgt_df__different = spark.createDataFrame([Row(x=1)])
+
+        assert core.is_dataframe_equal(lft_df, rgt_df__equal)
+        assert not core.is_dataframe_equal(lft_df, rgt_df__different)
+
+    def test_is_row_count_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        rgt_df__equal = spark.createDataFrame([Row(x=1), Row(x=3)])
+        rgt_df__different = spark.createDataFrame([Row(x=1)])
+
+        assert core.is_row_count_equal(lft_df, rgt_df__equal)
+        assert not core.is_row_count_equal(lft_df, rgt_df__different)
+
+    def test_is_row_value_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        rgt_df__equal = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+        rgt_df__different = spark.createDataFrame([Row(x=1, y=7), Row(x=3, y=9)])
+
+        assert core.is_row_value_equal(lft_df, rgt_df__equal)
+        assert not core.is_row_value_equal(lft_df, rgt_df__different)
+
+    def test_is_schema_equal(self, spark: SparkSession):
+        lft_df = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+
+        rgt_df__equal = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+        rgt_df__different_type = spark.createDataFrame(
+            [
+                Row(x=1, y="2"),
+                Row(x=3, y="4"),
+            ]
+        )
+        rgt_df__different_size = spark.createDataFrame([Row(x=1), Row(x=3)])
+
+        assert core.is_schema_equal(lft_df, rgt_df__equal)
+        assert not core.is_schema_equal(lft_df, rgt_df__different_type)
+        assert not core.is_schema_equal(lft_df, rgt_df__different_size)
+
+    def test_join(self, spark: SparkSession):
+        df1 = spark.createDataFrame([Row(id=1, x="a"), Row(id=2, x="b")])
+        df2 = spark.createDataFrame([Row(id=1, y="c"), Row(id=2, y="d")])
+        df3 = spark.createDataFrame([Row(id=1, z="e"), Row(id=2, z="f")])
+
+        actual = core.join(df1, df2, df3, on="id")
+        expected = df1.join(df2, "id").join(df3, "id")
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.skip
+    def test_peek(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(x=1, y="a", z=True),
+                Row(x=3, y=None, z=False),
+                Row(x=None, y="c", z=True),
+            ]
+        )
+        actual = (
+            df.transform(
+                lambda df: core.peek(df, n=20, shape=True, cache=True, schema=True)
+            )
+            .where(F.col("x").isNotNull())
+            .transform(lambda df: core.peek(df))
+        )
+        expected = df.where(F.col("x").isNotNull())
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_str_to_col(self):
+        actual = core.str_to_col("x")
+        assert isinstance(actual, SparkCol)
+
+        actual = core.str_to_col(F.col("x"))
+        assert isinstance(actual, SparkCol)
+
+    def test_union(self, spark: SparkSession):
+        df1 = spark.createDataFrame([Row(x=1, y=2), Row(x=3, y=4)])
+        df2 = spark.createDataFrame([Row(x=5, y=6), Row(x=7, y=8)])
+        df3 = spark.createDataFrame([Row(x=0, y=1), Row(x=2, y=3)])
+
+        actual = core.union(df1, df2, df3)
+        expected = df1.unionByName(df2).unionByName(df3)
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.parametrize("func", [toolz.identity])
+    def test_with_date_diff_ago(self, spark: SparkSession, func: Callable):
+        ref_date = func("2024-01-01")
+        df = spark.createDataFrame(
+            [
+                Row(i=1, d=func("2023-11-30"), expect=32),
+                Row(i=2, d=func("2023-12-15"), expect=17),
+                Row(i=3, d=func("2023-12-20"), expect=12),
+                Row(i=4, d=func("2023-12-29"), expect=3),
+                Row(i=5, d=func("2023-12-30"), expect=2),
+                Row(i=6, d=func("2023-12-31"), expect=1),
+                Row(i=7, d=func("2024-01-01"), expect=0),
+                Row(i=8, d=func("2024-01-02"), expect=-1),
+                Row(i=9, d=func("2024-01-08"), expect=-7),
+                Row(i=10, d=func("2024-01-10"), expect=-9),
+            ]
+        )
+
+        actual = core.with_date_diff_ago(df, "d", ref_date, "fx").select("i", "fx")
+        expected = df.select("i", F.col("expect").cast(T.IntegerType()).alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.parametrize("func", [toolz.identity])
+    def test_with_date_diff_ahead(self, spark: SparkSession, func: Callable):
+        ref_date = func("2024-01-01")
+        df = spark.createDataFrame(
+            [
+                Row(i=1, d=func("2023-11-30"), expect=-32),
+                Row(i=2, d=func("2023-12-15"), expect=-17),
+                Row(i=3, d=func("2023-12-20"), expect=-12),
+                Row(i=4, d=func("2023-12-29"), expect=-3),
+                Row(i=5, d=func("2023-12-30"), expect=-2),
+                Row(i=6, d=func("2023-12-31"), expect=-1),
+                Row(i=7, d=func("2024-01-01"), expect=0),
+                Row(i=8, d=func("2024-01-02"), expect=1),
+                Row(i=9, d=func("2024-01-08"), expect=7),
+                Row(i=10, d=func("2024-01-10"), expect=9),
+            ]
+        )
+
+        actual = core.with_date_diff_ahead(df, "d", ref_date, "fx").select("i", "fx")
+        expected = df.select("i", F.col("expect").cast(T.IntegerType()).alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.parametrize("f", [toolz.identity])
+    def test_with_endofweek_date(self, spark: SparkSession, f: Callable):
+        field_type = T.StringType() if f == toolz.identity else T.DateType()
+        df = spark.createDataFrame(
+            [
+                Row(i=1, d=f("2023-04-30"), e1=f("2023-04-30"), e2=f("2023-05-06")),
+                Row(i=2, d=f("2023-05-01"), e1=f("2023-05-07"), e2=f("2023-05-06")),
+                Row(i=3, d=f("2023-05-02"), e1=f("2023-05-07"), e2=f("2023-05-06")),
+                Row(i=4, d=f("2023-05-03"), e1=f("2023-05-07"), e2=f("2023-05-06")),
+                Row(i=5, d=f("2023-05-04"), e1=f("2023-05-07"), e2=f("2023-05-06")),
+                Row(i=6, d=f("2023-05-05"), e1=f("2023-05-07"), e2=f("2023-05-06")),
+                Row(i=7, d=f("2023-05-06"), e1=f("2023-05-07"), e2=f("2023-05-06")),
+                Row(i=8, d=f("2023-05-07"), e1=f("2023-05-07"), e2=f("2023-05-13")),
+                Row(i=9, d=f("2023-05-08"), e1=f("2023-05-14"), e2=f("2023-05-13")),
+                Row(i=10, d=None, e1=None, e2=None),
+            ],
+            schema=T.StructType(
+                [
+                    T.StructField("i", T.IntegerType(), True),
+                    T.StructField("d", field_type, True),
+                    T.StructField("expect_sun", field_type, True),
+                    T.StructField("expect_sat", field_type, True),
+                ]
+            ),
+        )
+
+        actual = core.with_endofweek_date(df, "d", "fx").select("i", "fx")
+        expected = df.select("i", F.col("expect_sun").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.with_endofweek_date(df, "d", "fx", "Sat").select("i", "fx")
+        expected = df.select("i", F.col("expect_sat").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.skip(reason="nondeterministic output")
+    def test_with_increasing_id(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(i=1, x="a", expect=0),
+                Row(i=2, x="b", expect=8589934592),
+                Row(i=3, x="c", expect=17179869184),
+                Row(i=4, x="d", expect=25769803776),
+                Row(i=5, x="e", expect=34359738368),
+                Row(i=6, x="f", expect=42949672960),
+                Row(i=7, x="g", expect=51539607552),
+                Row(i=8, x="h", expect=60129542144),
+            ],
+            schema=T.StructType(
+                [
+                    T.StructField("i", T.IntegerType(), True),
+                    T.StructField("x", T.StringType(), True),
+                    T.StructField("expect", T.LongType(), True),
+                ]
+            ),
+        )
+
+        actual = core.with_increasing_id(df, "fx").select("i", "fx")
+        expected = df.select("i", F.col("expect").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_with_index(self, spark: SparkSession):
+        df = spark.createDataFrame(
+            [
+                Row(i=1, x="a", expect=1),
+                Row(i=2, x="b", expect=2),
+                Row(i=3, x="c", expect=3),
+                Row(i=4, x="d", expect=4),
+                Row(i=5, x="e", expect=5),
+                Row(i=6, x="f", expect=6),
+                Row(i=7, x="g", expect=7),
+                Row(i=8, x="h", expect=8),
+            ],
+            schema=T.StructType(
+                [
+                    T.StructField("i", T.IntegerType(), True),
+                    T.StructField("x", T.StringType(), True),
+                    T.StructField("expect", T.IntegerType(), True),
+                ]
+            ),
+        )
+
+        actual = core.with_index(df, "fx").select("i", "fx")
+        expected = df.select("i", F.col("expect").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.skip
+    @pytest.mark.parametrize("f", [toolz.identity])
+    def test_with_startofweek_date(self, spark: SparkSession, f: Callable):
+        field_type = T.StringType() if f == toolz.identity else T.DateType()
+        s2d = toolz.identity
+        df = spark.createDataFrame(
+            [
+                Row(i=1, d=f("2023-04-30"), e1=s2d("2023-04-24"), e2=s2d("2023-04-30")),
+                Row(i=2, d=f("2023-05-01"), e1=s2d("2023-05-01"), e2=s2d("2023-04-30")),
+                Row(i=3, d=f("2023-05-02"), e1=s2d("2023-05-01"), e2=s2d("2023-04-30")),
+                Row(i=4, d=f("2023-05-03"), e1=s2d("2023-05-01"), e2=s2d("2023-04-30")),
+                Row(i=5, d=f("2023-05-04"), e1=s2d("2023-05-01"), e2=s2d("2023-04-30")),
+                Row(i=6, d=f("2023-05-05"), e1=s2d("2023-05-01"), e2=s2d("2023-04-30")),
+                Row(i=7, d=f("2023-05-06"), e1=s2d("2023-05-01"), e2=s2d("2023-04-30")),
+                Row(i=8, d=f("2023-05-07"), e1=s2d("2023-05-01"), e2=s2d("2023-05-07")),
+                Row(i=9, d=f("2023-05-08"), e1=s2d("2023-05-08"), e2=s2d("2023-05-07")),
+                Row(i=10, d=None, e1=None, e2=None),
+            ],
+            schema=T.StructType(
+                [
+                    T.StructField("i", T.IntegerType(), True),
+                    T.StructField("d", field_type, True),
+                    T.StructField("expect_sun", T.DateType(), True),
+                    T.StructField("expect_sat", T.DateType(), True),
+                ],
+            ),
+        )
+
+        actual = core.with_startofweek_date(df, "d", "fx").select("i", "fx")
+        expected = df.select("i", F.col("expect_sun").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+        actual = core.with_startofweek_date(df, "d", "fx", "Sat").select("i", "fx")
+        expected = df.select("i", F.col("expect_sat").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    @pytest.mark.parametrize("func", [toolz.identity])
+    def test_with_weekday(self, spark: SparkSession, func: Callable):
+        df = spark.createDataFrame(
+            [
+                Row(i=1, d=func("2023-05-01"), expect="Mon"),
+                Row(i=2, d=func("2023-05-02"), expect="Tue"),
+                Row(i=3, d=func("2023-05-03"), expect="Wed"),
+                Row(i=4, d=func("2023-05-04"), expect="Thu"),
+                Row(i=5, d=func("2023-05-05"), expect="Fri"),
+                Row(i=6, d=func("2023-05-06"), expect="Sat"),
+                Row(i=7, d=func("2023-05-07"), expect="Sun"),
+                Row(i=8, d=None, expect=None),
+            ]
+        )
+        actual = core.with_weekday(df, "d", "fx").select("i", "fx")
+        expected = df.select("i", F.col("expect").alias("fx"))
+        self.assert_dataframe_equal(actual, expected)
+
+    def test_spark_session(self, spark: SparkSession):
+        assert isinstance(spark, SparkSession)
+        assert spark.sparkContext.appName == "spark-session-for-testing"
+
+    @staticmethod
+    def assert_dataframe_equal(lft_df: SparkDF, rgt_df: SparkDF) -> None:
+        """Assert that the left and right data frames are equal."""
+        core.assert_dataframe_equal(lft_df, rgt_df)
+
+    @pytest.fixture(scope="class")
+    def spark(self, request: pytest.FixtureRequest) -> SparkSession:
+        spark = (
+            SparkSession.builder.master("local[*]")
+            .appName("spark-session-for-testing")
+            .config("spark.executor.instances", 1)
+            .config("spark.executor.cores", 4)
+            .config("spark.default.parallelism", 4)
+            .config("spark.sql.shuffle.partitions", 4)
+            .config("spark.rdd.compress", False)
+            .config("spark.shuffle.compress", False)
+            .config("spark.dynamicAllocation.enabled", False)
+            .config("spark.speculation", False)
+            .config("spark.ui.enabled", False)
+            .config("spark.ui.showConsoleProgress", False)
+            .getOrCreate()
+        )
+        spark.sparkContext.setLogLevel("OFF")
+        request.addfinalizer(lambda: spark.stop())
+        return spark
