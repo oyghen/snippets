@@ -1,0 +1,6 @@
+[project]
+name = "snipsklearn"
+version = "0.0.0"
+dependencies = [
+    "scikit-learn>=1.7.2",
+]
