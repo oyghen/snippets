@@ -75,19 +75,3 @@ def test_create_boolean_array(
 ):
     actual = core.create_boolean_array(data, pos_label)
     npt.assert_array_equal(actual, expected)
-
-
-@pytest.mark.parametrize(
-    "x, expected",
-    [
-        ([], np.nan),
-        ([np.nan], np.nan),
-        ([np.nan, np.nan], np.nan),
-        ([1], np.nan),
-        ([1, 1], 0.0),
-        ([98, 127, 82, 67, 121, np.nan, 119, 92, 110, 113, 107], 5.963220606350229),
-    ],
-)
-def test_stderr(x: core.ArrayLike, expected: float):
-    actual = core.stderr(x)
-    npt.assert_array_equal(actual, expected)

@@ -2,7 +2,6 @@ __all__ = (
     "check_random_state",
     "check_vector",
     "create_boolean_array",
-    "stderr",
 )
 
 import random
@@ -104,19 +103,3 @@ def create_boolean_array(data: ArrayLike, pos_label: int | str) -> np.ndarray:
     """
     data_array = np.asarray(data)
     return data_array == pos_label
-
-
-def stderr(x: ArrayLike, /) -> float:
-    """Compute standard error of the mean.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from snipnumpy import core
-    >>> np.set_printoptions(legacy="1.21")
-    >>> round(core.stderr([98, 127, 82, 67, 121, np.nan, 119, 92, 110, 113, 107]), 4)
-    5.9632
-    """
-    x = check_vector([v for v in x if np.isfinite(v)], n_min=0)
-    n = len(x)
-    return x.std(ddof=1) / np.sqrt(n) if n > 1 else np.nan
